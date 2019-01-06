@@ -34,7 +34,11 @@ public class CartResource {
 
     @Inject
     @DiscoverService(value = "order-service", environment = "dev", version = "*")
-    private Optional<WebTarget> target;
+    private Optional<WebTarget> orderService;
+
+    @Inject
+    @DiscoverService(value = "catalog-service", environment = "dev", version = "*")
+    private Optional<WebTarget> catalogService;
 
     private static final Logger LOG = LogManager.getLogger(CartResource.class.getName());
 
@@ -78,6 +82,30 @@ public class CartResource {
     @POST
     @Path("/addToCart/{cartId}")
     public Response addItemToCart(Item i, @PathParam("cartId") Integer id) {
+        if (catalogService.isPresent()) {
+            WebTarget service = catalogService.get().path("products/getProductQty/productId/"+i.getProductId());
+            Response response;
+            try {
+                response = service.request().get();
+
+                JSONObject qtyJSON = new JSONObject(response.readEntity(String.class));
+                int qty = qtyJSON.getInt("qty");
+
+                if (qty < i.getQty()) {
+                    JSONObject error = new JSONObject();
+                    error.put("error", "Product is out of stock");
+                    LOG.trace("Product " + i.getProductId() + "is out of stock");
+                    return Response.status(Response.Status.METHOD_NOT_ALLOWED).entity(error.toString()).build();
+                }
+            } catch (ProcessingException e) {
+                e.printStackTrace();
+                return Response.status(408).build();
+            } catch (Exception e) {
+                e.printStackTrace();
+                return Response.status(500).build();
+            }
+        }
+
         em.getTransaction().begin();
 
         Cart c = em.find(Cart.class, id);
@@ -135,8 +163,8 @@ public class CartResource {
     public Response completeOrder(@PathParam("cartId") Integer cartId) throws Exception {
         Cart c = em.find(Cart.class, cartId);
 
-        if (target.isPresent()) {
-            WebTarget service = target.get().path("orders/completeOrder");
+        if (orderService.isPresent()) {
+            WebTarget service = orderService.get().path("orders/completeOrder");
 
             Response response;
             try {
