@@ -1,22 +1,26 @@
 package com.kumuluz.ee.samples.microservices.simple;
 
+import com.kumuluz.ee.discovery.annotations.DiscoverService;
 import com.kumuluz.ee.logs.LogManager;
 import com.kumuluz.ee.logs.Logger;
+import com.kumuluz.ee.logs.cdi.Log;
+import com.kumuluz.ee.samples.microservices.simple.Models.Cart;
+import com.kumuluz.ee.samples.microservices.simple.Models.Item;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import javax.enterprise.context.RequestScoped;
+import javax.inject.Inject;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
 import javax.persistence.TypedQuery;
 import javax.ws.rs.*;
+import javax.ws.rs.client.Entity;
+import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.util.List;
-import com.kumuluz.ee.logs.cdi.Log;
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import com.kumuluz.ee.samples.microservices.simple.Models.Cart;
-import com.kumuluz.ee.samples.microservices.simple.Models.Item;
+import java.util.Optional;
 
 @Path("/cart")
 @RequestScoped
@@ -27,6 +31,10 @@ public class CartResource {
 
     @PersistenceContext
     private EntityManager em;
+
+    @Inject
+    @DiscoverService(value = "order-service", environment = "dev", version = "*")
+    private Optional<WebTarget> target;
 
     private static final Logger LOG = LogManager.getLogger(CartResource.class.getName());
 
@@ -61,6 +69,8 @@ public class CartResource {
         em.persist(c);
 
         em.getTransaction().commit();
+
+        LOG.trace("New cart created.");
 
         return Response.status(Response.Status.CREATED).entity(c.getId()).build();
     }
@@ -118,6 +128,32 @@ public class CartResource {
         em.getTransaction().commit();
 
         return Response.status(Response.Status.OK).entity(c).build();
+    }
+
+    @POST
+    @Path("/completeOrder/{cartId}")
+    public Response completeOrder(@PathParam("cartId") Integer cartId) throws Exception {
+        Cart c = em.find(Cart.class, cartId);
+
+        if (target.isPresent()) {
+            WebTarget service = target.get().path("orders/completeOrder");
+
+            Response response;
+            try {
+                JSONObject cartJSON = new JSONObject(c.getCartJSON());
+                response = service.request().post(Entity.json(cartJSON.toString()));
+            } catch (ProcessingException e) {
+                e.printStackTrace();
+                return Response.status(408).build();
+            } catch (Exception e) {
+                e.printStackTrace();
+                return Response.status(500).build();
+            }
+
+            return Response.fromResponse(response).build();
+        } else {
+            return Response.status(Response.Status.NO_CONTENT).build();
+        }
     }
 
 }
