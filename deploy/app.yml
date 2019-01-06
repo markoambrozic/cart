@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: cart
-          image: markoambrozic/cart:1.0.2
+          image: markoambrozic/cart:1.0.3
           ports:
             - containerPort: 8080
           env:
