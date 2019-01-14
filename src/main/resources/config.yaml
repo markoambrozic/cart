@@ -3,9 +3,15 @@ kumuluzee:
   env:
     name: dev
   version: 1.0.0
+  metrics:
+    web-instrumentation:
+      - name: cart-endpoint
+        url-pattern: /cart
   datasources:
     - jndi-name: jdbc/BooksDS
       connection-url: jdbc:postgresql://postgres:5432/postgres
       username: dbuser
       password: postgres
       max-pool-size: 20
+
+
